@@ -1,0 +1,73 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "Data-Flow-DF"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/dataflow1')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "Internet_Sales",
+								"type": "DatasetReference"
+							},
+							"name": "Sales"
+						},
+						{
+							"dataset": {
+								"referenceName": "Product",
+								"type": "DatasetReference"
+							},
+							"name": "ProductOriginal"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "sinkDS",
+								"type": "DatasetReference"
+							},
+							"name": "InternetSales"
+						}
+					],
+					"transformations": [
+						{
+							"name": "SaalesSelectC"
+						},
+						{
+							"name": "SummarizebyProduct"
+						},
+						{
+							"name": "SalesProduct"
+						},
+						{
+							"name": "SalesSelfJoin"
+						},
+						{
+							"name": "Select1"
+						},
+						{
+							"name": "SelectProduct"
+						}
+					],
+					"script": "source(output(\n\t\tSalesOrderID as integer,\n\t\tSalesOrderDetailID as integer,\n\t\tOrderQty as integer,\n\t\tProductID as integer,\n\t\tUnitPrice as decimal(19,4),\n\t\tUnitPriceDiscount as decimal(19,4),\n\t\tLineTotal as decimal(38,6),\n\t\trowguid as string,\n\t\tModifiedDate as timestamp\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tformat: 'table') ~> Sales\nsource(output(\n\t\tProductID as integer,\n\t\tName as string,\n\t\tProductNumber as string,\n\t\tColor as string,\n\t\tStandardCost as decimal(19,4),\n\t\tListPrice as decimal(19,4),\n\t\tSize as string,\n\t\tWeight as decimal(8,2),\n\t\tProductCategoryID as integer,\n\t\tProductModelID as integer,\n\t\tSellStartDate as timestamp,\n\t\tSellEndDate as timestamp,\n\t\tDiscontinuedDate as timestamp,\n\t\tThumbNailPhoto as binary,\n\t\tThumbnailPhotoFileName as string,\n\t\trowguid as string,\n\t\tModifiedDate as timestamp\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tisolationLevel: 'READ_UNCOMMITTED',\n\tformat: 'table') ~> ProductOriginal\nSales select(mapColumn(\n\t\tSalesOrderDetailID,\n\t\tOrderQty,\n\t\tProductID,\n\t\tUnitPrice,\n\t\tUnitPriceDiscount,\n\t\tLineTotal\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> SaalesSelectC\nSaalesSelectC aggregate(groupBy(ProductID),\n\tUnitPrice = count(UnitPrice)) ~> SummarizebyProduct\nSalesSelfJoin, ProductOriginal join(SummarizebyProduct@ProductID == ProductOriginal@ProductID,\n\tjoinType:'left',\n\tbroadcast: 'auto')~> SalesProduct\nSummarizebyProduct, SaalesSelectC join(SummarizebyProduct@ProductID == SaalesSelectC@ProductID,\n\tjoinType:'inner',\n\tbroadcast: 'auto')~> SalesSelfJoin\nSalesProduct select(mapColumn(\n\t\tProductID = SummarizebyProduct@ProductID,\n\t\tUnitPrice = SummarizebyProduct@UnitPrice,\n\t\tSalesOrderDetailID,\n\t\tOrderQty,\n\t\tProductID = SaalesSelectC@ProductID,\n\t\tUnitPrice = SaalesSelectC@UnitPrice,\n\t\tUnitPriceDiscount,\n\t\tLineTotal,\n\t\tProductID = ProductOriginal@ProductID,\n\t\tName,\n\t\tColor,\n\t\tStandardCost,\n\t\tListPrice,\n\t\tSize\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> Select1\nProductOriginal select(mapColumn(\n\t\tProductID,\n\t\tName,\n\t\tProductNumber,\n\t\tColor,\n\t\tStandardCost,\n\t\tListPrice,\n\t\tProductCategoryID,\n\t\tProductModelID,\n\t\tSellStartDate\n\t),\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> SelectProduct\nSelect1 sink(input(\n\t\tColumn_1 as string,\n\t\tColumn_2 as string,\n\t\tColumn_3 as string,\n\t\tColumn_4 as string,\n\t\tColumn_5 as string,\n\t\tColumn_6 as string,\n\t\tColumn_7 as string,\n\t\tColumn_8 as string,\n\t\tColumn_9 as string\n\t),\n\tallowSchemaDrift: true,\n\tvalidateSchema: false,\n\tskipDuplicateMapInputs: true,\n\tskipDuplicateMapOutputs: true) ~> InternetSales"
+				}
+			},
+			"dependsOn": []
+		}
+	]
+}
